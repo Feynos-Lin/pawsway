@@ -1,7 +1,7 @@
 name: Build and release
 
 # Push a tag like v1.0.0 (or run manually with a version) to build the
-# Android APK, Linux .rpm and Windows installer and attach them to a GitHub Release.
+# Android APK and attach it to a GitHub Release.
 on:
   push:
     tags: ['v*']
@@ -52,47 +52,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: android, path: 'Pawsway-*.apk' }
 
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - name: Install rpm tooling
-        run: |
-          sudo apt-get update && sudo apt-get install -y rpm ruby ruby-dev build-essential
-          sudo gem install --no-document fpm
-      - name: Build .rpm
-        working-directory: desktop
-        env:
-          USE_SYSTEM_FPM: 'true'
-        run: |
-          mkdir -p app && cp ../index.html icon.png app/
-          npm install --no-audit --no-fund
-          npm version "${VERSION#v}" --no-git-tag-version --allow-same-version
-          npm run dist:linux
-      - uses: actions/upload-artifact@v4
-        with: { name: linux, path: 'desktop/dist/*.rpm' }
-
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20' }
-      - name: Build installer
-        working-directory: desktop
-        shell: bash
-        run: |
-          mkdir -p app && cp ../index.html icon.png app/
-          npm install --no-audit --no-fund
-          npm version "${VERSION#v}" --no-git-tag-version --allow-same-version
-          npm run dist:win
-      - uses: actions/upload-artifact@v4
-        with: { name: windows, path: 'desktop/dist/*.exe' }
-
   release:
-    needs: [android, linux, windows]
+    needs: [android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
