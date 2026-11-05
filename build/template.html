@@ -1,0 +1,347 @@
+<title>Pawsway Road Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800;900&family=Atkinson+Hyperlegible:wght@400;700&family=Overpass+Mono:wght@500&display=swap">
+<style>
+/* Layout: road-atlas split — trip controls and night-by-night itinerary on the left, a sticky schematic interstate map on the right; stacks on phones. */
+:root{
+  --bg:#e9eef2; --panel:#ffffff; --ink:#17212b; --muted:#566475; --line:#d2dae2;
+  --land:#dfe6dc; --border-st:#b9c4bb; --road:#c3ccd4; --route:#1f5fbf; --route-halo:#ffffff;
+  --sign:#00694a; --sign-ink:#ffffff; --shield-blue:#1d4f9a; --shield-red:#c8102e;
+  --good:#167a46; --warn:#a15c00; --off:#9aa6b2; --chip:#eef2f6;
+  --f-display:"Overpass","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"Overpass Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10161c; --panel:#18212a; --ink:#e4eaf0; --muted:#94a2b1; --line:#2b3641;
+  --land:#212b33; --border-st:#36434e; --road:#3a4652; --route:#5d9dff; --route-halo:#10161c;
+  --sign:#0b7d57; --sign-ink:#ffffff; --shield-blue:#2a5fb0; --shield-red:#d22a43;
+  --good:#4cc488; --warn:#e3a14a; --off:#5c6977; --chip:#222c36; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10161c; --panel:#18212a; --ink:#e4eaf0; --muted:#94a2b1; --line:#2b3641;
+  --land:#212b33; --border-st:#36434e; --road:#3a4652; --route:#5d9dff; --route-halo:#10161c;
+  --sign:#0b7d57; --sign-ink:#ffffff; --shield-blue:#2a5fb0; --shield-red:#d22a43;
+  --good:#4cc488; --warn:#e3a14a; --off:#5c6977; --chip:#222c36; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px}
+h1{font-family:var(--f-display);font-weight:900;font-size:clamp(26px,4vw,38px);line-height:1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 span{color:var(--sign)}
+.tag{color:var(--muted);margin:6px 0 0;max-width:60ch}
+.app{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:18px;align-items:start}
+.left{display:flex;flex-direction:column;gap:14px;min-width:0}
+.right{position:sticky;top:12px;display:flex;flex-direction:column;gap:14px;min-width:0}
+@media (max-width:920px){.app{display:flex;flex-direction:column;gap:14px}.left,.right{display:contents}
+  .o1{order:1}.mapbox{order:2}.o3{order:3}.days{order:4}.o5{order:5}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.label{font-family:var(--f-display);font-weight:800;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form .full{grid-column:1/-1}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:13px;color:var(--muted);font-weight:700}
+select,input[type=number],input[type=date]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+select:focus-visible,input:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--route);outline-offset:2px}
+.ft{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
+.swap{font:inherit;font-size:18px;background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:6px;width:38px;height:40px;cursor:pointer}
+.swap:hover{border-color:var(--route)}
+.range{display:flex;align-items:center;gap:10px}
+.range input{flex:1;accent-color:var(--sign)}
+.range output{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:14px;white-space:nowrap;min-width:9ch;text-align:right}
+.check{display:flex;gap:8px;align-items:center;font-size:14px}
+.check input{accent-color:var(--sign);width:18px;height:18px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;font-weight:700;background:transparent;color:var(--muted);border:0;padding:6px 10px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--sign);color:var(--sign-ink)}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.stat{display:flex;flex-direction:column}
+.stat b{font-family:var(--f-display);font-weight:900;font-size:24px;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat span{font-size:12px;color:var(--muted)}
+.mapbox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.maphead{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;padding:2px 4px}
+.maphead small{color:var(--muted)}
+svg.map{width:100%;height:auto;display:block;max-width:100%}
+.land{fill:var(--land)} .bord{fill:none;stroke:var(--border-st);stroke-width:.7}
+.road{stroke:var(--road);stroke-width:1.2;stroke-linecap:round}
+.rt{stroke:var(--route);stroke-width:4.2;stroke-linecap:round;stroke-linejoin:round;fill:none}
+.rth{stroke:var(--route-halo);stroke-width:7.5;stroke-linecap:round;stroke-linejoin:round;fill:none;opacity:.8}
+.city{fill:var(--panel);stroke:var(--muted);stroke-width:1;cursor:pointer}
+.city:hover{stroke:var(--route);stroke-width:2.2}
+.city.on{fill:var(--route);stroke:var(--route)}
+.hit{fill:transparent;cursor:pointer}
+.mk circle{stroke:var(--route-halo);stroke-width:2}
+.mk text{font-family:var(--f-display);font-weight:900;font-size:11px;fill:#fff;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.lbl{font-family:var(--f-display);font-weight:800;font-size:12.5px;fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round;pointer-events:none}
+.lbl.sm{font-weight:600;font-size:11px;fill:var(--muted)}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-display);font-weight:800;font-size:14px;text-decoration:none;color:var(--sign-ink);background:var(--sign);border-radius:6px;padding:8px 12px}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.btn:hover{filter:brightness(1.08)}
+.days{display:flex;flex-direction:column;gap:12px}
+.day{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.dayhead{padding:12px 16px 10px;display:flex;flex-direction:column;gap:6px}
+.dayhead .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.dayhead .when{font-family:var(--f-display);font-weight:800;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.dayhead .dist{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted)}
+.leg{font-weight:700;font-size:15px}
+.shields{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.shields svg{display:block}
+.sign{background:var(--sign);color:var(--sign-ink);margin:0 10px;border-radius:8px;border:2px solid var(--sign-ink);box-shadow:0 0 0 2px var(--sign);padding:8px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.sign .nm{font-family:var(--f-display);font-weight:800;font-size:19px;line-height:1.1}
+.sign .nt{font-family:var(--f-display);font-weight:600;font-size:12px;opacity:.9;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.sign.arrive{margin-bottom:12px}
+.hotels{list-style:none;margin:10px 0 0;padding:0 16px 14px;display:flex;flex-direction:column}
+.hotels li{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.hotels li:first-child{border-top:0}
+.hotels .hn{font-weight:700;font-size:14px;min-width:0}
+.hotels .hn small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.fee{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:13px;white-space:nowrap}
+.fee.free{color:var(--good);font-weight:500}
+.find{font-size:13px;font-weight:700;color:var(--route);text-decoration:none;white-space:nowrap}
+.find:hover{text-decoration:underline}
+.allpet{padding:0 16px 14px;font-size:13px}
+.allpet a{color:var(--route);font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-family:var(--f-display);font-weight:800;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+tr.out td{color:var(--off)}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--chip);color:var(--muted);margin-top:2px}
+.pill.ok{color:var(--good)} .pill.no{color:var(--warn)}
+.tw{overflow-x:auto}
+.note{font-size:13px;color:var(--muted);margin:10px 0 0;max-width:70ch}
+.empty{color:var(--muted);padding:16px}
+@media (max-width:480px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.form{grid-template-columns:1fr}.hotels li{grid-template-columns:minmax(0,1fr) auto}.hotels .find{grid-column:1/-1}}
+@media (prefers-reduced-motion:no-preference){.rt{transition:opacity .2s}}
+</style>
+
+<div class="wrap">
+<header>
+  <div>
+    <h1>Pawsway <span>Road Atlas</span></h1>
+    <p class="tag">Plan a cross-country move with pets. Pick your start and destination, set how far you want to drive each day, and see pet-friendly hotel chains at every overnight stop.</p>
+  </div>
+</header>
+
+<div class="app">
+  <div class="left">
+    <section class="panel o1" aria-label="Trip settings">
+      <div class="form">
+        <div class="full ft">
+          <div class="field"><label for="from">Starting from</label><select id="from"></select></div>
+          <button class="swap" id="swap" type="button" aria-label="Swap start and destination" title="Swap">⇄</button>
+          <div class="field"><label for="to">Moving to</label><select id="to"></select></div>
+        </div>
+        <div class="field full">
+          <label for="mpd">Max driving per day</label>
+          <div class="range"><input id="mpd" type="range" min="200" max="700" step="25" value="450"><output id="mpdOut" for="mpd"></output></div>
+        </div>
+        <div class="field"><label for="date">Departure date</label><input id="date" type="date"></div>
+        <div class="field"><label for="species">Traveling with</label>
+          <select id="species"><option value="dog">Dog(s)</option><option value="cat">Cat(s)</option><option value="both">Dogs and cats</option></select></div>
+        <div class="field"><label for="pets">Number of pets</label><input id="pets" type="number" min="1" max="6" value="2"></div>
+        <div class="field"><label for="lb">Heaviest pet (lb)</label><input id="lb" type="number" min="1" max="200" value="55"></div>
+        <label class="check full"><input id="free" type="checkbox"> Only show hotels with no pet fee</label>
+      </div>
+    </section>
+
+    <section class="panel o3" aria-label="Trip summary">
+      <div class="summary" id="summary"></div>
+      <div class="links" id="links" style="margin-top:12px"></div>
+    </section>
+
+    <div class="days" id="days"></div>
+  </div>
+
+  <div class="right">
+    <section class="mapbox" aria-label="Route map">
+      <div class="maphead">
+        <div class="seg" role="group" aria-label="Map click sets">
+          <button type="button" id="setFrom" aria-pressed="false">Tap map: set start</button>
+          <button type="button" id="setTo" aria-pressed="true">Set destination</button>
+        </div>
+        <small>Schematic interstate map · mileage approximate</small>
+      </div>
+      <svg class="map" id="map" viewBox="0 0 960 600" role="img" aria-label="Map of the continental United States with your route"></svg>
+    </section>
+
+    <section class="panel o5" aria-label="Pet fees for the whole trip">
+      <div class="label">Pet fees for the whole trip</div>
+      <div class="tw"><table id="fees"></table></div>
+      <p class="note">Ranges are typical brand policies. Most locations are franchised and set their own rules, and some charge per pet. Call the specific hotel to confirm before booking.</p>
+    </section>
+  </div>
+</div>
+</div>
+
+<script>
+const DATA = __DATA__;
+const CHAINS = [
+  {id:'rr', name:'Red Roof Inn', sub:'Red Roof, Red Roof PLUS+', type:'free', maxPets:1, maxLb:80, cats:true, metro:false},
+  {id:'m6', name:'Motel 6', sub:'Motel 6, Studio 6', type:'free', maxPets:2, maxLb:null, cats:true, metro:false},
+  {id:'lq', name:'La Quinta', sub:'La Quinta Inn & Suites', type:'stay', lo:25, hi:40, maxPets:2, maxLb:null, cats:true, metro:false},
+  {id:'bw', name:'Best Western', sub:'Participating hotels', type:'night', lo:30, hi:40, maxPets:2, maxLb:null, cats:true, metro:false},
+  {id:'hi', name:'Hilton brands', sub:'Home2 Suites, Homewood, Hampton', type:'stay', lo:50, hi:125, maxPets:2, maxLb:75, cats:true, metro:false},
+  {id:'mr', name:'Marriott brands', sub:'Residence Inn, Aloft, Element', type:'stay', lo:75, hi:125, maxPets:null, maxLb:null, cats:true, metro:false},
+  {id:'ki', name:'Kimpton', sub:'Boutique, big cities', type:'free', maxPets:null, maxLb:null, cats:true, metro:true},
+  {id:'hy', name:'Hyatt', sub:'Hyatt House, Hyatt Place', type:'stay', lo:100, hi:100, maxPets:2, maxLb:50, cats:false, metro:true},
+];
+const MPH = 60;
+const $ = id => document.getElementById(id);
+const city = Object.fromEntries(DATA.cities.map(c=>[c.id,c]));
+const adj = {}; DATA.cities.forEach(c=>adj[c.id]=[]);
+DATA.edges.forEach(([a,b,lab,mi])=>{adj[a].push({to:b,lab,mi});adj[b].push({to:a,lab,mi});});
+const cname = c => `${c.n}, ${c.st}`;
+const fmtMi = n => Math.round(n).toLocaleString();
+const fmtHr = mi => {const m=Math.round(mi/MPH*60/15)*15;return `${Math.floor(m/60)}h${m%60?` ${m%60}m`:''}`;};
+const NS='http://www.w3.org/2000/svg';
+const el=(t,a={},p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;};
+
+function route(s,t){
+  const dist={},prev={},done=new Set();DATA.cities.forEach(c=>dist[c.id]=Infinity);dist[s]=0;
+  while(true){let u=null,b=Infinity;for(const k in dist)if(!done.has(k)&&dist[k]<b){b=dist[k];u=k;}
+    if(u===null||u===t)break;done.add(u);
+    for(const e of adj[u]){const d=dist[u]+e.mi;if(d<dist[e.to]){dist[e.to]=d;prev[e.to]={from:u,lab:e.lab,mi:e.mi};}}}
+  if(dist[t]===Infinity)return null;
+  const nodes=[t],legs=[];let k=t;while(k!==s){const p=prev[k];legs.unshift({a:p.from,b:k,lab:p.lab,mi:p.mi});k=p.from;nodes.unshift(k);}
+  return {nodes,legs,total:dist[t]};
+}
+function splitDays(r,max){
+  const cum=[0];r.legs.forEach((l,i)=>cum.push(cum[i]+l.mi));
+  const last=r.nodes.length-1,days=[];let i=0;
+  while(i<last){let j=i+1;while(j<last&&cum[j+1]-cum[i]<=max)j++;
+    // avoid a tiny final day: if remaining after j is under 15% of max and fits within 120% of max, push through
+    if(j<last&&cum[last]-cum[i]<=max*1.2&&cum[last]-cum[j]<max*.15)j=last;
+    days.push({from:r.nodes[i],to:r.nodes[j],mi:cum[j]-cum[i],roads:[...new Set(r.legs.slice(i,j).map(l=>l.lab))],via:r.nodes.slice(i+1,j)});i=j;}
+  return days;
+}
+function eligible(ch,o,c){
+  const why=[];
+  if(c&&ch.metro&&!c.m)return {ok:false,why:['Not in smaller towns']};
+  if(o.species!=='dog'&&!ch.cats)why.push('Dogs only');
+  if(ch.maxPets!=null&&o.pets>ch.maxPets)why.push(`Max ${ch.maxPets} pet${ch.maxPets>1?'s':''}`);
+  if(ch.maxLb!=null&&o.lb>ch.maxLb)why.push(`${ch.maxLb} lb limit`);
+  if(o.free&&ch.type!=='free')why.push('Charges a fee');
+  return {ok:!why.length,why};
+}
+const feeText=ch=>ch.type==='free'?'No fee':ch.type==='night'?`$${ch.lo}–${ch.hi}/night`:ch.lo===ch.hi?`~$${ch.lo}/stay`:`$${ch.lo}–${ch.hi}/stay`;
+const gm=q=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);
+
+function shield(lab){
+  const [kind,num]=lab.split('-');const w=num.length>2?30:24;
+  const s=el('svg',{width:w,height:24,viewBox:`0 0 ${w} 24`,role:'img','aria-label':lab});
+  if(kind==='I'){
+    el('path',{d:`M1 4 Q${w/2} 0 ${w-1} 4 L${w-1} 8 L1 8 Z`,fill:'var(--shield-red)'},s);
+    el('path',{d:`M1 8 L${w-1} 8 L${w-1} 12 Q${w-1} 20 ${w/2} 23 Q1 20 1 12 Z`,fill:'var(--shield-blue)'},s);
+    const t=el('text',{x:w/2,y:17.5,'text-anchor':'middle','font-family':'Overpass,sans-serif','font-weight':900,'font-size':10,fill:'#fff'},s);t.textContent=num;
+  }else{
+    el('path',{d:`M2 2 L${w-2} 2 Q${w-2} 9 ${w-1} 11 Q${w-2} 20 ${w/2} 22.5 Q2 20 1 11 Q2 9 2 2 Z`,fill:'#fff',stroke:'#111','stroke-width':1.4},s);
+    const t=el('text',{x:w/2,y:16,'text-anchor':'middle','font-family':'Overpass,sans-serif','font-weight':900,'font-size':kind==='US'?10:9,fill:'#111'},s);t.textContent=num;
+    if(kind!=='US'){s.firstChild.setAttribute('d',`M1 4 H${w-1} V20 H1 Z`);}
+  }
+  return s;
+}
+
+// ---- state
+const S={from:'DEN',to:'RDU',mpd:450,date:'',species:'dog',pets:2,lb:55,free:false,click:'to'};
+try{Object.assign(S,JSON.parse(localStorage.getItem('pawsway')||'{}'));}catch(e){}
+if(!S.date){const d=new Date();d.setDate(d.getDate()+7);S.date=d.toISOString().slice(0,10);}
+const save=()=>{try{localStorage.setItem('pawsway',JSON.stringify(S));}catch(e){}};
+
+// ---- controls
+const sorted=[...DATA.cities].sort((a,b)=>a.n.localeCompare(b.n));
+for(const id of ['from','to']){const s=$(id);sorted.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=cname(c);s.appendChild(o);});}
+function syncControls(){$('from').value=S.from;$('to').value=S.to;$('mpd').value=S.mpd;$('date').value=S.date;$('species').value=S.species;$('pets').value=S.pets;$('lb').value=S.lb;$('free').checked=S.free;
+  $('setFrom').setAttribute('aria-pressed',S.click==='from');$('setTo').setAttribute('aria-pressed',S.click==='to');}
+const bind=(id,key,fn=v=>v)=>$(id).addEventListener('input',e=>{S[key]=fn(e.target.type==='checkbox'?e.target.checked:e.target.value);render();});
+bind('from','from');bind('to','to');bind('mpd','mpd',Number);bind('date','date');bind('species','species');
+bind('pets','pets',v=>Math.max(1,Number(v)||1));bind('lb','lb',v=>Math.max(1,Number(v)||1));bind('free','free');
+$('swap').onclick=()=>{[S.from,S.to]=[S.to,S.from];syncControls();render();};
+$('setFrom').onclick=()=>{S.click='from';syncControls();save();};
+$('setTo').onclick=()=>{S.click='to';syncControls();save();};
+
+// ---- static map layers
+const svg=$('map');
+el('path',{d:DATA.land,class:'land'},svg);el('path',{d:DATA.borders,class:'bord'},svg);
+const gRoads=el('g',{},svg);
+DATA.edges.forEach(([a,b])=>el('line',{x1:city[a].x,y1:city[a].y,x2:city[b].x,y2:city[b].y,class:'road'},gRoads));
+const gRoute=el('g',{},svg),gCities=el('g',{},svg),gMarks=el('g',{},svg),gLbl=el('g',{},svg);
+const dots={};
+DATA.cities.forEach(c=>{const g=el('g',{},gCities);
+  el('circle',{cx:c.x,cy:c.y,r:9,class:'hit'},g);dots[c.id]=el('circle',{cx:c.x,cy:c.y,r:3.2,class:'city'},g);
+  const t=el('title',{},g);t.textContent=cname(c);
+  g.addEventListener('click',()=>{if(S.click==='from'){S.from=c.id;S.click='to';}else S.to=c.id;syncControls();render();});});
+
+function label(c,text,cls){const right=c.x<820;const t=el('text',{x:c.x+(right?10:-10),y:c.y-8,class:'lbl'+(cls?' '+cls:''),'text-anchor':right?'start':'end'},gLbl);t.textContent=text;}
+
+function render(){
+  save();
+  gRoute.innerHTML='';gMarks.innerHTML='';gLbl.innerHTML='';
+  Object.values(dots).forEach(d=>d.classList.remove('on'));
+  const days=$('days'),sum=$('summary'),links=$('links'),fees=$('fees');
+  if(S.from===S.to){days.innerHTML='<div class="panel empty">Pick a destination different from your starting city.</div>';sum.innerHTML='';links.innerHTML='';fees.innerHTML='';return;}
+  const r=route(S.from,S.to);if(!r){days.innerHTML='<div class="panel empty">No route found between those cities.</div>';return;}
+  const plan=splitDays(r,S.mpd);
+  const nights=plan.slice(0,-1).map(d=>city[d.to]);
+  const o={species:S.species,pets:S.pets,lb:S.lb,free:S.free};
+  // map route
+  const pts=r.nodes.map(id=>`${city[id].x},${city[id].y}`).join(' ');
+  el('polyline',{points:pts,class:'rth'},gRoute);el('polyline',{points:pts,class:'rt'},gRoute);
+  r.nodes.forEach(id=>dots[id].classList.add('on'));
+  const mk=(c,txt,fill)=>{const g=el('g',{class:'mk'},gMarks);el('circle',{cx:c.x,cy:c.y,r:9,fill},g);const t=el('text',{x:c.x,y:c.y+.5},g);t.textContent=txt;};
+  mk(city[S.from],'A','var(--sign)');nights.forEach((c,i)=>mk(c,i+1,'var(--route)'));mk(city[S.to],'B','var(--shield-red)');
+  label(city[S.from],city[S.from].n);label(city[S.to],city[S.to].n);nights.forEach(c=>label(c,c.n,'sm'));
+  // summary
+  const totalHr=r.total/MPH;
+  sum.innerHTML=[[fmtMi(r.total),'miles (approx.)'],[fmtHr(r.total),'behind the wheel'],[plan.length,plan.length===1?'driving day':'driving days'],[nights.length,nights.length===1?'hotel night':'hotel nights']]
+    .map(([b,s])=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
+  const wp=nights.slice(0,9).map(cname).join('|');
+  const dir='https://www.google.com/maps/dir/?api=1&travelmode=driving&origin='+encodeURIComponent(cname(city[S.from]))+'&destination='+encodeURIComponent(cname(city[S.to]))+(wp?'&waypoints='+encodeURIComponent(wp):'');
+  links.innerHTML=`<a class="btn" href="${dir}" target="_blank" rel="noopener">Open route in Google Maps ↗</a>`;
+  // days
+  const start=new Date(S.date+'T12:00:00');
+  days.innerHTML='';
+  plan.forEach((d,i)=>{
+    const dt=new Date(start);dt.setDate(dt.getDate()+i);
+    const when=isNaN(dt)?`Day ${i+1}`:`Day ${i+1} · ${dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}`;
+    const last=i===plan.length-1,c=city[d.to];
+    const card=document.createElement('article');card.className='day';
+    card.innerHTML=`<div class="dayhead"><div class="top"><span class="when">${when}</span><span class="dist">${d.mi>S.mpd?'<span class="pill no">Over your daily max</span> ':''}${fmtMi(d.mi)} mi · ${fmtHr(d.mi)}</span></div>
+      <div class="leg">${city[d.from].n} → ${c.n}</div><div class="shields"></div></div>
+      <div class="sign ${last?'arrive':''}"><span class="nm">${cname(c)}</span><span class="nt">${last?'You’ve arrived':'Overnight '+(i+1)}</span></div>`;
+    const sh=card.querySelector('.shields');d.roads.forEach(l=>sh.appendChild(shield(l)));
+    if(d.via.length){const v=document.createElement('span');v.style.cssText='font-size:12px;color:var(--muted);margin-left:4px';v.textContent='via '+d.via.map(x=>city[x].n).join(', ');sh.appendChild(v);}
+    if(!last){
+      const ul=document.createElement('ul');ul.className='hotels';
+      const ok=CHAINS.filter(ch=>eligible(ch,o,c).ok).sort((a,b)=>(a.type==='free'?0:a.lo)-(b.type==='free'?0:b.lo));
+      if(!ok.length)ul.innerHTML='<li><span class="hn">No major chain matches your filters here.<small>Try the full pet-friendly search below.</small></span></li>';
+      ok.forEach(ch=>{const li=document.createElement('li');
+        li.innerHTML=`<span class="hn">${ch.name}<small>${ch.sub}</small></span><span class="fee ${ch.type==='free'?'free':''}">${feeText(ch)}</span><a class="find" target="_blank" rel="noopener" href="${gm(ch.name.replace(' brands','')+' '+cname(c))}">Find in ${c.n} ↗</a>`;ul.appendChild(li);});
+      card.appendChild(ul);
+      const a=document.createElement('div');a.className='allpet';a.innerHTML=`<a target="_blank" rel="noopener" href="${gm('pet friendly hotels '+cname(c))}">See every pet-friendly hotel in ${c.n} ↗</a>`;card.appendChild(a);
+    }
+    days.appendChild(card);
+  });
+  // fee table
+  const n=nights.length;
+  const rows=CHAINS.map(ch=>{
+    const gen=eligible(ch,o,null);const avail=nights.filter(c=>!ch.metro||c.m).length;
+    let lo=0,hi=0;if(ch.type!=='free'){lo=ch.lo*avail;hi=ch.hi*avail;}
+    return {ch,gen,avail,lo,hi};
+  }).sort((a,b)=>(b.gen.ok-a.gen.ok)||(a.lo-b.lo));
+  fees.innerHTML=`<thead><tr><th>Chain</th><th>Policy</th><th style="text-align:right">${n} night${n===1?'':'s'}</th></tr></thead><tbody>`+
+    rows.map(({ch,gen,avail,lo,hi})=>{
+      const tot=!gen.ok?'—':avail===0?'—':ch.type==='free'?'$0':lo===hi?`$${lo}`:`$${lo}–${hi}`;
+      const cov=n===0?'':avail<n?`<span class="pill">At ${avail} of ${n} stops</span>`:`<span class="pill ok">Every stop</span>`;
+      const st=gen.ok?cov:gen.why.map(w=>`<span class="pill no">${w}</span>`).join(' ');
+      const lim=[ch.maxPets?`${ch.maxPets} pet${ch.maxPets>1?'s':''}`:'pet limit varies',ch.maxLb?`${ch.maxLb} lb`:'weight varies'].join(' · ');
+      return `<tr class="${gen.ok?'':'out'}"><td><b>${ch.name}</b><br>${st}</td><td>${feeText(ch)}<br><small style="color:var(--muted)">${lim}${ch.cats?'':' · dogs only'}</small></td><td class="n">${tot}</td></tr>`;
+    }).join('')+'</tbody>';
+  if(n===0)fees.innerHTML+='<tbody><tr><td colspan="3" style="color:var(--muted)">This trip fits in one day, so no hotel nights.</td></tr></tbody>';
+  $('mpdOut').textContent=`${S.mpd} mi · ${fmtHr(S.mpd)}`;
+}
+$('mpd').addEventListener('input',()=>$('mpdOut').textContent=`${$('mpd').value} mi · ${fmtHr($('mpd').value)}`);
+syncControls();render();
+</script>
