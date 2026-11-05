@@ -1,0 +1,103 @@
+name: Build and release
+
+# Push a tag like v1.0.0 (or run manually with a version) to build the
+# Android APK, Linux .rpm and Windows installer and attach them to a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.0.1)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.14.3' }
+      - name: Copy web app into assets
+        run: mkdir -p android/app/src/main/assets && cp index.html android/app/src/main/assets/
+      - name: Decode signing key (if configured)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ANDROID_KEYSTORE_B64 not set; APK will be debug-signed and can't upgrade-install over a differently signed build."
+          fi
+      - name: Build APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          export VERSION_NAME="${VERSION#v}"
+          gradle --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "../Pawsway-${VERSION_NAME}.apk"
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: 'Pawsway-*.apk' }
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: Build .rpm
+        working-directory: desktop
+        run: |
+          mkdir -p app && cp ../index.html icon.png app/
+          npm install --no-audit --no-fund
+          npm version "${VERSION#v}" --no-git-tag-version --allow-same-version
+          npm run dist:linux
+      - uses: actions/upload-artifact@v4
+        with: { name: linux, path: 'desktop/dist/*.rpm' }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Build installer
+        working-directory: desktop
+        shell: bash
+        run: |
+          mkdir -p app && cp ../index.html icon.png app/
+          npm install --no-audit --no-fund
+          npm version "${VERSION#v}" --no-git-tag-version --allow-same-version
+          npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: 'desktop/dist/*.exe' }
+
+  release:
+    needs: [android, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - name: Normalize tag
+        run: v="${VERSION#v}"; echo "TAG=v$v" >> "$GITHUB_ENV"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Pawsway ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          files: out/*

@@ -1,0 +1,29 @@
+{
+  "name": "pawsway",
+  "productName": "Pawsway",
+  "version": "1.0.0",
+  "description": "Pet-friendly cross-country route planner",
+  "author": "Feynos-Lin",
+  "homepage": "https://github.com/Feynos-Lin/pawsway",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:linux": "electron-builder --linux rpm --publish never",
+    "dist:win": "electron-builder --win nsis --publish never"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.feynos.pawsway",
+    "productName": "Pawsway",
+    "files": ["main.js", "app/**/*"],
+    "icon": "icon.png",
+    "artifactName": "Pawsway-${version}-${arch}.${ext}",
+    "linux": { "target": ["rpm"], "category": "Utility", "maintainer": "Feynos-Lin", "synopsis": "Pet-friendly road trip planner" },
+    "win": { "target": ["nsis"] },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "artifactName": "Pawsway-Setup-${version}.${ext}" }
+  }
+}
