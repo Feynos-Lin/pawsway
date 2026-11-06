@@ -59,6 +59,6 @@ const hav=(a,b)=>{const R=3958.8,t=x=>x*Math.PI/180;const dl=t(b[3]-a[3]),dn=t(b
 const edges=[];
 for(const grp of E.split('|')){const [lab,list]=grp.split(':');for(const p of list.split(',')){const [a,b]=p.split('-');if(!byId[a]||!byId[b])throw new Error(p);edges.push([a,b,lab,Math.round(hav(byId[a],byId[b])*1.17)]);}}
 const cities=C.map(([id,n,st,lat,lon,m])=>{const [x,y]=proj([lon,lat]);return {id,n,st,lat,lon,m,x:+x.toFixed(1),y:+y.toFixed(1)};});
-const data={land:path(land),borders:path(borders),cities,edges};
+const data={land:path(land),borders:path(borders),cities,edges,proj:{k:+proj.scale().toFixed(4),t:proj.translate().map(v=>+v.toFixed(4))}};
 fs.writeFileSync('data.json',JSON.stringify(data));
 console.log('bytes',JSON.stringify(data).length,'edges',edges.length,'max',Math.max(...edges.map(e=>e[3])));

@@ -42,7 +42,7 @@ h1 span{color:var(--sign)}
 .form .full{grid-column:1/-1}
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .field label{font-size:13px;color:var(--muted);font-weight:700}
-select,input[type=number],input[type=date]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+select,input[type=number],input[type=date],input[type=text],input[type=password]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
 select:focus-visible,input:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--route);outline-offset:2px}
 .ft{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:end}
 .swap{font:inherit;font-size:18px;background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:6px;width:38px;height:40px;cursor:pointer}
@@ -113,6 +113,18 @@ tr.out td{color:var(--off)}
 .tw{overflow-x:auto}
 .note{font-size:13px;color:var(--muted);margin:10px 0 0;max-width:70ch}
 .empty{color:var(--muted);padding:16px}
+.routing{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.rhead{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.rchip{font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--chip);color:var(--muted)}
+.rchip.g{background:var(--sign);color:var(--sign-ink)}
+.keyrow{display:flex;gap:6px}
+.keyrow input{flex:1}
+.sbtn{font:inherit;font-size:13px;font-weight:700;background:var(--sign);color:var(--sign-ink);border:0;border-radius:6px;padding:0 12px;cursor:pointer}
+.sbtn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.rnote{font-size:13px;color:var(--muted);margin:0}
+.rnote a{color:var(--route)}
+.rnote.err{color:var(--warn)}
+.banner{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:10px;padding:10px 14px;font-size:14px}
 @media (max-width:480px){.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.form{grid-template-columns:1fr}.hotels li{grid-template-columns:minmax(0,1fr) auto}.hotels .find{grid-column:1/-1}}
 @media (prefers-reduced-motion:no-preference){.rt{transition:opacity .2s}}
 </style>
@@ -121,7 +133,7 @@ tr.out td{color:var(--off)}
 <header>
   <div>
     <h1>Pawsway <span>Road Atlas</span></h1>
-    <p class="tag">Plan a cross-country move with pets. Pick your start and destination, set how far you want to drive each day, and see pet-friendly hotel chains at every overnight stop.</p>
+    <p class="tag">Plan a cross-country move with pets. Enter your start and destination, set how far you want to drive each day, and see pet-friendly hotel chains at every overnight stop. Add a Google key to route with Google Maps.</p>
   </div>
 </header>
 
@@ -130,9 +142,10 @@ tr.out td{color:var(--off)}
     <section class="panel o1" aria-label="Trip settings">
       <div class="form">
         <div class="full ft">
-          <div class="field"><label for="from">Starting from</label><select id="from"></select></div>
+          <div class="field"><label for="from">Starting from</label><input id="from" type="text" list="cityList" autocomplete="off" spellcheck="false"></div>
           <button class="swap" id="swap" type="button" aria-label="Swap start and destination" title="Swap">⇄</button>
-          <div class="field"><label for="to">Moving to</label><select id="to"></select></div>
+          <div class="field"><label for="to">Moving to</label><input id="to" type="text" list="cityList" autocomplete="off" spellcheck="false"></div>
+          <datalist id="cityList"></datalist>
         </div>
         <div class="field full">
           <label for="mpd">Max driving per day</label>
@@ -144,6 +157,15 @@ tr.out td{color:var(--off)}
         <div class="field"><label for="pets">Number of pets</label><input id="pets" type="number" min="1" max="6" value="2"></div>
         <div class="field"><label for="lb">Heaviest pet (lb)</label><input id="lb" type="number" min="1" max="200" value="55"></div>
         <label class="check full"><input id="free" type="checkbox"> Only show hotels with no pet fee</label>
+        <div class="full routing">
+          <div class="rhead"><span class="label">Routing</span><span class="rchip" id="rchip"></span></div>
+          <div class="keyrow">
+            <input id="gkey" type="password" autocomplete="off" spellcheck="false" placeholder="Google Routes API key" aria-label="Google Routes API key">
+            <button type="button" class="sbtn" id="saveKey">Save</button>
+            <button type="button" class="sbtn ghost" id="clearKey">Remove</button>
+          </div>
+          <p class="rnote" id="gstatus"></p>
+        </div>
       </div>
     </section>
 
@@ -162,7 +184,7 @@ tr.out td{color:var(--off)}
           <button type="button" id="setFrom" aria-pressed="false">Tap map: set start</button>
           <button type="button" id="setTo" aria-pressed="true">Set destination</button>
         </div>
-        <small>Schematic interstate map · mileage approximate</small>
+        <small id="mapnote"></small>
       </div>
       <svg class="map" id="map" viewBox="0 0 960 600" role="img" aria-label="Map of the continental United States with your route"></svg>
     </section>
@@ -195,11 +217,21 @@ const adj = {}; DATA.cities.forEach(c=>adj[c.id]=[]);
 DATA.edges.forEach(([a,b,lab,mi])=>{adj[a].push({to:b,lab,mi});adj[b].push({to:a,lab,mi});});
 const cname = c => `${c.n}, ${c.st}`;
 const fmtMi = n => Math.round(n).toLocaleString();
-const fmtHr = mi => {const m=Math.round(mi/MPH*60/15)*15;return `${Math.floor(m/60)}h${m%60?` ${m%60}m`:''}`;};
+const fmtSec = sec => {const m=Math.round(sec/60/15)*15;return `${Math.floor(m/60)}h${m%60?` ${m%60}m`:''}`;};
+const fmtHr = mi => fmtSec(mi/MPH*3600);
+const esc = t => String(t).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
 const NS='http://www.w3.org/2000/svg';
 const el=(t,a={},p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e;};
+const hav=(la1,lo1,la2,lo2)=>{const R=3958.8,t=x=>x*Math.PI/180;const h=Math.sin(t(la2-la1)/2)**2+Math.cos(t(la1))*Math.cos(t(la2))*Math.sin(t(lo2-lo1)/2)**2;return 2*R*Math.asin(Math.sqrt(h));};
 
-function route(s,t){
+// Albers USA (lower 48) — same projection the base map was drawn with
+const PJ=(()=>{const R=Math.PI/180,p0=29.5*R,p1=45.5*R,sy0=Math.sin(p0),n=(sy0+Math.sin(p1))/2,c=1+sy0*(2*n-sy0),r0=Math.sqrt(c)/n;
+  const raw=(l,f)=>{const r=Math.sqrt(c-2*n*Math.sin(f))/n;const x=l*n;return [r*Math.sin(x),r0-r*Math.cos(x)];};
+  const C=raw(-0.6*R,38.7*R),{k,t}=DATA.proj;
+  return (lat,lon)=>{const [x,y]=raw((lon+96)*R,lat*R);return [t[0]+k*(x-C[0]),t[1]-k*(y-C[1])];};})();
+
+// ---------- built-in network routing ----------
+function netRoute(s,t){
   const dist={},prev={},done=new Set();DATA.cities.forEach(c=>dist[c.id]=Infinity);dist[s]=0;
   while(true){let u=null,b=Infinity;for(const k in dist)if(!done.has(k)&&dist[k]<b){b=dist[k];u=k;}
     if(u===null||u===t)break;done.add(u);
@@ -208,18 +240,92 @@ function route(s,t){
   const nodes=[t],legs=[];let k=t;while(k!==s){const p=prev[k];legs.unshift({a:p.from,b:k,lab:p.lab,mi:p.mi});k=p.from;nodes.unshift(k);}
   return {nodes,legs,total:dist[t]};
 }
-function splitDays(r,max){
+const cityStop=c=>({name:c.n,full:cname(c),q:cname(c),lat:c.lat,lon:c.lon,metro:!!c.m});
+function netPlan(fromId,toId,max){
+  const r=netRoute(fromId,toId);if(!r)return null;
   const cum=[0];r.legs.forEach((l,i)=>cum.push(cum[i]+l.mi));
   const last=r.nodes.length-1,days=[];let i=0;
   while(i<last){let j=i+1;while(j<last&&cum[j+1]-cum[i]<=max)j++;
-    // avoid a tiny final day: if remaining after j is under 15% of max and fits within 120% of max, push through
     if(j<last&&cum[last]-cum[i]<=max*1.2&&cum[last]-cum[j]<max*.15)j=last;
-    days.push({from:r.nodes[i],to:r.nodes[j],mi:cum[j]-cum[i],roads:[...new Set(r.legs.slice(i,j).map(l=>l.lab))],via:r.nodes.slice(i+1,j)});i=j;}
-  return days;
+    const mi=cum[j]-cum[i];
+    days.push({from:cityStop(city[r.nodes[i]]),to:cityStop(city[r.nodes[j]]),mi,sec:mi/MPH*3600,
+      roads:[...new Set(r.legs.slice(i,j).map(l=>l.lab))],via:r.nodes.slice(i+1,j).map(x=>city[x].n)});i=j;}
+  return {source:'net',total:r.total,sec:r.total/MPH*3600,days,line:r.nodes.map(id=>[city[id].x,city[id].y]),
+    a:cityStop(city[fromId]),b:cityStop(city[toId])};
 }
-function eligible(ch,o,c){
+
+// ---------- Google Routes API ----------
+const nativeCalls={};let nativeSeq=0;
+window.__pwCb=(id,status,text)=>{const f=nativeCalls[id];if(f){delete nativeCalls[id];f({status,text});}};
+function httpPost(url,headers,body){
+  if(window.PawswayNative&&PawswayNative.request){ // Android app: native HTTP, no CORS
+    return new Promise(res=>{const id='c'+(++nativeSeq);nativeCalls[id]=res;PawswayNative.request(id,'POST',url,JSON.stringify(headers),body);});
+  }
+  return fetch(url,{method:'POST',headers,body}).then(async r=>({status:r.status,text:await r.text()}));
+}
+function decodePoly(str){const pts=[];let i=0,lat=0,lng=0;while(i<str.length){for(const k of [0,1]){let b,sh=0,res=0;do{b=str.charCodeAt(i++)-63;res|=(b&31)<<sh;sh+=5;}while(b>=32);const d=(res&1)?~(res>>1):(res>>1);if(k===0)lat+=d;else lng+=d;}pts.push([lat/1e5,lng/1e5]);}return pts;}
+async function googleRoute(from,to,key){
+  const body=JSON.stringify({origin:{address:from},destination:{address:to},travelMode:'DRIVE',routingPreference:'TRAFFIC_UNAWARE',units:'IMPERIAL'});
+  const r=await httpPost('https://routes.googleapis.com/directions/v2:computeRoutes',{
+    'Content-Type':'application/json','X-Goog-Api-Key':key,
+    'X-Goog-FieldMask':'routes.distanceMeters,routes.duration,routes.legs.steps.distanceMeters,routes.legs.steps.staticDuration,routes.legs.steps.polyline.encodedPolyline,routes.legs.steps.navigationInstruction.instructions'},body);
+  let j;try{j=JSON.parse(r.text);}catch(e){throw new Error(r.status?`Google returned an unexpected response (HTTP ${r.status}).`:(r.text||'No response from Google.'));}
+  if(r.status!==200)throw new Error((j.error&&j.error.message)||`Google returned HTTP ${r.status}.`);
+  if(!j.routes||!j.routes.length)throw new Error('Google found no driving route between those places.');
+  // Build a track of points with cumulative miles and seconds
+  const track=[],roads=[];let mi=0,sec=0,lastPt=null;
+  for(const leg of j.routes[0].legs)for(const st of (leg.steps||[])){
+    const pts=st.polyline?decodePoly(st.polyline.encodedPolyline):[];
+    const smi=(st.distanceMeters||0)/1609.344,ssec=parseFloat(st.staticDuration||'0')||0;
+    const ins=(st.navigationInstruction&&st.navigationInstruction.instructions)||'';
+    const m=ins.match(/\b(I|US)-\d+\b/g);if(m)roads.push({mi,labs:[...new Set(m)]});
+    let geo=0;for(let i=1;i<pts.length;i++)geo+=hav(pts[i-1][0],pts[i-1][1],pts[i][0],pts[i][1]);
+    const f=geo>0?smi/geo:0;
+    pts.forEach((p,i)=>{if(i>0){const d=hav(pts[i-1][0],pts[i-1][1],p[0],p[1]);mi+=d*f;sec+=geo>0?ssec*(d/geo):0;}
+      if(!lastPt||mi-lastPt[2]>=0.5||i===pts.length-1){lastPt=[+p[0].toFixed(5),+p[1].toFixed(5),+mi.toFixed(2),Math.round(sec)];track.push(lastPt);}});
+    if(!pts.length){mi+=smi;sec+=ssec;}
+  }
+  return {track,roads,total:(j.routes[0].distanceMeters||0)/1609.344||mi,sec:parseFloat(j.routes[0].duration||'0')||sec};
+}
+function nearestTown(lat,lon){let best=null,bd=Infinity;for(const c of DATA.cities){const d=hav(lat,lon,c.lat,c.lon);if(d<bd){bd=d;best=c;}}return {c:best,d:bd};}
+function googlePlan(g,fromText,toText,max){
+  const T=g.track,total=T[T.length-1][2];
+  // Towns from the built-in list that sit on the route (within 20 mi), with their position along it
+  const cand=[];
+  for(const c of DATA.cities){let bd=Infinity,bm=0;for(const p of T){const d=hav(c.lat,c.lon,p[0],p[1]);if(d<bd){bd=d;bm=p[2];}}
+    if(bd<=20&&bm>5&&bm<total-5)cand.push({c,along:bm});}
+  cand.sort((a,b)=>a.along-b.along);
+  const atMi=m=>{let lo=0,hi=T.length-1;while(lo<hi){const md=(lo+hi)>>1;if(T[md][2]<m)lo=md+1;else hi=md;}return T[lo];};
+  const endName=(txt,pt)=>{const c=resolve(txt);if(c)return cityStop(c);const short=txt.split(',')[0].trim();
+    return {name:short.length>26?short.slice(0,25)+'…':short,full:txt,q:txt,lat:pt[0],lon:pt[1],metro:false};};
+  const A=endName(fromText,T[0]),B=endName(toText,T[T.length-1]);
+  const days=[];let pos=0,cur=A,curPt=T[0];
+  while(pos<total-0.01){
+    let next,nextPos,nextPt;
+    if(total-pos<=max){next=B;nextPos=total;nextPt=T[T.length-1];}
+    else{
+      const win=cand.filter(x=>x.along>pos+max*.4&&x.along<=pos+max);
+      if(win.length){const pick=win[win.length-1];
+        if(total-pos<=max*1.2&&total-pick.along<max*.15){next=B;nextPos=total;nextPt=T[T.length-1];}
+        else{next=cityStop(pick.c);nextPos=pick.along;nextPt=atMi(nextPos);}}
+      else{nextPos=pos+max;nextPt=atMi(nextPos);const nt=nearestTown(nextPt[0],nextPt[1]);
+        next={name:`Mile ${fmtMi(nextPos)}`,full:`Around mile ${fmtMi(nextPos)} · ${Math.round(nt.d)} mi from ${cname(nt.c)}`,q:null,lat:nextPt[0],lon:nextPt[1],metro:false};}
+    }
+    const labs=[];for(const r of g.roads)if(r.mi>=pos-0.5&&r.mi<nextPos)r.labs.forEach(l=>{if(!labs.includes(l))labs.push(l);});
+    const via=cand.filter(x=>x.along>pos+10&&x.along<nextPos-10).map(x=>x.c.n);
+    days.push({from:cur,to:next,mi:nextPos-pos,sec:nextPt[3]-curPt[3],roads:labs.slice(0,7),via:via.length>5?[...via.slice(0,4),`${via.length-4} more`]:via});
+    pos=nextPos;cur=next;curPt=nextPt;
+  }
+  const line=[];let lastMi=-99;for(const p of T){if(p[2]-lastMi>=2||p===T[T.length-1]){line.push(PJ(p[0],p[1]));lastMi=p[2];}}
+  return {source:'google',total,sec:g.sec,days,line,a:A,b:B};
+}
+
+// ---------- shared helpers ----------
+function resolve(txt){const t=(txt||'').trim().toLowerCase();if(!t)return null;
+  return DATA.cities.find(c=>cname(c).toLowerCase()===t)||DATA.cities.find(c=>c.n.toLowerCase()===t)||null;}
+function eligible(ch,o,stop){
   const why=[];
-  if(c&&ch.metro&&!c.m)return {ok:false,why:['Not in smaller towns']};
+  if(stop&&ch.metro&&!stop.metro)return {ok:false,why:['Not in smaller towns']};
   if(o.species!=='dog'&&!ch.cats)why.push('Dogs only');
   if(ch.maxPets!=null&&o.pets>ch.maxPets)why.push(`Max ${ch.maxPets} pet${ch.maxPets>1?'s':''}`);
   if(ch.maxLb!=null&&o.lb>ch.maxLb)why.push(`${ch.maxLb} lb limit`);
@@ -227,7 +333,9 @@ function eligible(ch,o,c){
   return {ok:!why.length,why};
 }
 const feeText=ch=>ch.type==='free'?'No fee':ch.type==='night'?`$${ch.lo}–${ch.hi}/night`:ch.lo===ch.hi?`~$${ch.lo}/stay`:`$${ch.lo}–${ch.hi}/stay`;
-const gm=q=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q);
+const gmSearch=(what,stop)=>stop.q?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(what+' '+stop.q)
+  :`https://www.google.com/maps/search/${encodeURIComponent(what)}/@${stop.lat},${stop.lon},11z`;
+const wp=s=>s.q||`${s.lat},${s.lon}`;
 
 function shield(lab){
   const [kind,num]=lab.split('-');const w=num.length>2?30:24;
@@ -237,32 +345,51 @@ function shield(lab){
     el('path',{d:`M1 8 L${w-1} 8 L${w-1} 12 Q${w-1} 20 ${w/2} 23 Q1 20 1 12 Z`,fill:'var(--shield-blue)'},s);
     const t=el('text',{x:w/2,y:17.5,'text-anchor':'middle','font-family':'Overpass,sans-serif','font-weight':900,'font-size':10,fill:'#fff'},s);t.textContent=num;
   }else{
-    el('path',{d:`M2 2 L${w-2} 2 Q${w-2} 9 ${w-1} 11 Q${w-2} 20 ${w/2} 22.5 Q2 20 1 11 Q2 9 2 2 Z`,fill:'#fff',stroke:'#111','stroke-width':1.4},s);
+    el('path',{d:kind==='US'?`M2 2 L${w-2} 2 Q${w-2} 9 ${w-1} 11 Q${w-2} 20 ${w/2} 22.5 Q2 20 1 11 Q2 9 2 2 Z`:`M1 4 H${w-1} V20 H1 Z`,fill:'#fff',stroke:'#111','stroke-width':1.4},s);
     const t=el('text',{x:w/2,y:16,'text-anchor':'middle','font-family':'Overpass,sans-serif','font-weight':900,'font-size':kind==='US'?10:9,fill:'#111'},s);t.textContent=num;
-    if(kind!=='US'){s.firstChild.setAttribute('d',`M1 4 H${w-1} V20 H1 Z`);}
   }
   return s;
 }
 
-// ---- state
-const S={from:'DEN',to:'RDU',mpd:450,date:'',species:'dog',pets:2,lb:55,free:false,click:'to'};
-try{Object.assign(S,JSON.parse(localStorage.getItem('pawsway')||'{}'));}catch(e){}
+// ---------- state ----------
+const S={from:'Denver, CO',to:'Raleigh, NC',mpd:450,date:'',species:'dog',pets:2,lb:55,free:false,click:'to',key:''};
+try{const o=JSON.parse(localStorage.getItem('pawsway')||'{}');
+  for(const k of ['from','to'])if(o[k]&&city[o[k]])o[k]=cname(city[o[k]]); // v1.0 stored city ids
+  Object.assign(S,o);}catch(e){}
 if(!S.date){const d=new Date();d.setDate(d.getDate()+7);S.date=d.toISOString().slice(0,10);}
 const save=()=>{try{localStorage.setItem('pawsway',JSON.stringify(S));}catch(e){}};
+let G={key:null,data:null,err:null,loading:false};
+const routeKey=()=>S.from.trim().toLowerCase()+'|'+S.to.trim().toLowerCase();
+try{const c=JSON.parse(localStorage.getItem('pawsway-g')||'null');if(c&&c.key)G={key:c.key,data:c.data,err:null,loading:false};}catch(e){}
 
-// ---- controls
-const sorted=[...DATA.cities].sort((a,b)=>a.n.localeCompare(b.n));
-for(const id of ['from','to']){const s=$(id);sorted.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=cname(c);s.appendChild(o);});}
-function syncControls(){$('from').value=S.from;$('to').value=S.to;$('mpd').value=S.mpd;$('date').value=S.date;$('species').value=S.species;$('pets').value=S.pets;$('lb').value=S.lb;$('free').checked=S.free;
+// ---------- controls ----------
+const dl=$('cityList');[...DATA.cities].sort((a,b)=>a.n.localeCompare(b.n)).forEach(c=>{const o=document.createElement('option');o.value=cname(c);dl.appendChild(o);});
+function syncControls(){$('from').value=S.from;$('to').value=S.to;$('mpd').value=S.mpd;$('date').value=S.date;$('species').value=S.species;$('pets').value=S.pets;$('lb').value=S.lb;$('free').checked=S.free;$('gkey').value=S.key;
   $('setFrom').setAttribute('aria-pressed',S.click==='from');$('setTo').setAttribute('aria-pressed',S.click==='to');}
 const bind=(id,key,fn=v=>v)=>$(id).addEventListener('input',e=>{S[key]=fn(e.target.type==='checkbox'?e.target.checked:e.target.value);render();});
-bind('from','from');bind('to','to');bind('mpd','mpd',Number);bind('date','date');bind('species','species');
+bind('mpd','mpd',Number);bind('date','date');bind('species','species');
 bind('pets','pets',v=>Math.max(1,Number(v)||1));bind('lb','lb',v=>Math.max(1,Number(v)||1));bind('free','free');
-$('swap').onclick=()=>{[S.from,S.to]=[S.to,S.from];syncControls();render();};
+for(const id of ['from','to'])$(id).addEventListener('change',e=>{S[id]=e.target.value.trim();refreshRoute();});
+$('swap').onclick=()=>{[S.from,S.to]=[S.to,S.from];syncControls();refreshRoute();};
 $('setFrom').onclick=()=>{S.click='from';syncControls();save();};
 $('setTo').onclick=()=>{S.click='to';syncControls();save();};
+$('saveKey').onclick=()=>{S.key=$('gkey').value.trim();G={key:null,data:null,err:null,loading:false};save();refreshRoute();};
+$('clearKey').onclick=()=>{S.key='';$('gkey').value='';G={key:null,data:null,err:null,loading:false};try{localStorage.removeItem('pawsway-g');}catch(e){}save();render();};
 
-// ---- static map layers
+async function refreshRoute(){
+  save();
+  if(!S.key||!S.from||!S.to||routeKey().split('|')[0]===routeKey().split('|')[1]){render();return;}
+  if(G.key===routeKey()&&G.data){render();return;}
+  const k=routeKey();G={key:k,data:null,err:null,loading:true};render();
+  try{const data=await googleRoute(S.from,S.to,S.key);if(G.key!==k)return;G={key:k,data,err:null,loading:false};
+    try{localStorage.setItem('pawsway-g',JSON.stringify({key:k,data}));}catch(e){}}
+  catch(e){if(G.key!==k)return;
+    const msg=(e&&e.message)||String(e);
+    G={key:k,data:null,err:/Failed to fetch|NetworkError|Load failed|blocked/i.test(msg)?'Couldn’t reach Google from here. Google routing works in the Android app and on the GitHub Pages site.':msg,loading:false};}
+  render();
+}
+
+// ---------- map ----------
 const svg=$('map');
 el('path',{d:DATA.land,class:'land'},svg);el('path',{d:DATA.borders,class:'bord'},svg);
 const gRoads=el('g',{},svg);
@@ -272,76 +399,99 @@ const dots={};
 DATA.cities.forEach(c=>{const g=el('g',{},gCities);
   el('circle',{cx:c.x,cy:c.y,r:9,class:'hit'},g);dots[c.id]=el('circle',{cx:c.x,cy:c.y,r:3.2,class:'city'},g);
   const t=el('title',{},g);t.textContent=cname(c);
-  g.addEventListener('click',()=>{if(S.click==='from'){S.from=c.id;S.click='to';}else S.to=c.id;syncControls();render();});});
+  g.addEventListener('click',()=>{if(S.click==='from'){S.from=cname(c);S.click='to';}else S.to=cname(c);syncControls();refreshRoute();});});
+function label(x,y,text,cls){const right=x<820;const t=el('text',{x:x+(right?10:-10),y:y-8,class:'lbl'+(cls?' '+cls:''),'text-anchor':right?'start':'end'},gLbl);t.textContent=text;}
 
-function label(c,text,cls){const right=c.x<820;const t=el('text',{x:c.x+(right?10:-10),y:c.y-8,class:'lbl'+(cls?' '+cls:''),'text-anchor':right?'start':'end'},gLbl);t.textContent=text;}
-
+// ---------- render ----------
+function setRouting(mode,msg,isErr){
+  const chip=$('rchip');
+  chip.textContent=mode==='google'?'Google · fastest route':mode==='loading'?'Asking Google…':'Built-in road network';
+  chip.className='rchip'+(mode==='google'||mode==='loading'?' g':'');
+  const st=$('gstatus');st.className='rnote'+(isErr?' err':'');
+  st.innerHTML=msg||(S.key?'':'Add a Google Routes API key to get Google’s fastest route between any two addresses. <a href="https://developers.google.com/maps/documentation/routes/get-api-key" target="_blank" rel="noopener">How to get a key ↗</a>');
+  $('mapnote').textContent=mode==='google'?'Route from Google Maps · towns and hotels from Pawsway':'Schematic interstate map · mileage approximate';
+}
 function render(){
   save();
   gRoute.innerHTML='';gMarks.innerHTML='';gLbl.innerHTML='';
   Object.values(dots).forEach(d=>d.classList.remove('on'));
   const days=$('days'),sum=$('summary'),links=$('links'),fees=$('fees');
-  if(S.from===S.to){days.innerHTML='<div class="panel empty">Pick a destination different from your starting city.</div>';sum.innerHTML='';links.innerHTML='';fees.innerHTML='';return;}
-  const r=route(S.from,S.to);if(!r){days.innerHTML='<div class="panel empty">No route found between those cities.</div>';return;}
-  const plan=splitDays(r,S.mpd);
-  const nights=plan.slice(0,-1).map(d=>city[d.to]);
+  $('mpdOut').textContent=`${S.mpd} mi · ${fmtHr(S.mpd)}`;
+  const clear=msg=>{days.innerHTML=`<div class="panel empty">${msg}</div>`;sum.innerHTML='';links.innerHTML='';fees.innerHTML='';};
+  if(!S.from||!S.to){setRouting(S.key?'google':'net');return clear('Enter where you’re starting and where you’re moving to.');}
+  if(S.from.trim().toLowerCase()===S.to.trim().toLowerCase()){setRouting(S.key?'google':'net');return clear('Pick a destination different from your starting point.');}
+
+  let plan=null,banner='';
+  if(S.key&&G.key===routeKey()&&G.data){plan=googlePlan(G.data,S.from,S.to,S.mpd);setRouting('google');}
+  else{
+    if(S.key&&G.loading)setRouting('loading','Getting the fastest route from Google…');
+    else if(S.key&&G.err)setRouting('net','Google: '+esc(G.err),true);
+    else setRouting('net');
+    const a=resolve(S.from),b=resolve(S.to);
+    if(a&&b)plan=netPlan(a.id,b.id,S.mpd);
+    if(S.key&&G.err&&plan)banner='Showing the built-in route because Google routing failed. Details are under Routing.';
+    if(!plan){
+      if(S.key&&G.loading)return clear('Getting the fastest route from Google…');
+      return clear(S.key?'Couldn’t get a route from Google for those places. Check the addresses and the message under Routing.'
+        :'Without a Google key, pick both places from the city list. Add a Google Routes API key under Routing to use any address.');
+    }
+  }
+  const nights=plan.days.slice(0,-1).map(d=>d.to);
   const o={species:S.species,pets:S.pets,lb:S.lb,free:S.free};
-  // map route
-  const pts=r.nodes.map(id=>`${city[id].x},${city[id].y}`).join(' ');
+  // map
+  const pts=plan.line.map(p=>p.join(',')).join(' ');
   el('polyline',{points:pts,class:'rth'},gRoute);el('polyline',{points:pts,class:'rt'},gRoute);
-  r.nodes.forEach(id=>dots[id].classList.add('on'));
-  const mk=(c,txt,fill)=>{const g=el('g',{class:'mk'},gMarks);el('circle',{cx:c.x,cy:c.y,r:9,fill},g);const t=el('text',{x:c.x,y:c.y+.5},g);t.textContent=txt;};
-  mk(city[S.from],'A','var(--sign)');nights.forEach((c,i)=>mk(c,i+1,'var(--route)'));mk(city[S.to],'B','var(--shield-red)');
-  label(city[S.from],city[S.from].n);label(city[S.to],city[S.to].n);nights.forEach(c=>label(c,c.n,'sm'));
+  if(plan.source==='net')DATA.cities.forEach(c=>{});
+  const xy=s=>PJ(s.lat,s.lon);
+  const mk=(s,txt,fill)=>{const [x,y]=xy(s);const g=el('g',{class:'mk'},gMarks);el('circle',{cx:x,cy:y,r:9,fill},g);const t=el('text',{x,y:y+.5},g);t.textContent=txt;};
+  mk(plan.a,'A','var(--sign)');nights.forEach((s,i)=>mk(s,i+1,'var(--route)'));mk(plan.b,'B','var(--shield-red)');
+  label(...xy(plan.a),plan.a.name);label(...xy(plan.b),plan.b.name);nights.forEach(s=>label(...xy(s),s.name,'sm'));
   // summary
-  const totalHr=r.total/MPH;
-  sum.innerHTML=[[fmtMi(r.total),'miles (approx.)'],[fmtHr(r.total),'behind the wheel'],[plan.length,plan.length===1?'driving day':'driving days'],[nights.length,nights.length===1?'hotel night':'hotel nights']]
+  sum.innerHTML=[[fmtMi(plan.total),plan.source==='google'?'miles':'miles (approx.)'],[fmtSec(plan.sec),'behind the wheel'],[plan.days.length,plan.days.length===1?'driving day':'driving days'],[nights.length,nights.length===1?'hotel night':'hotel nights']]
     .map(([b,s])=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
-  const wp=nights.slice(0,9).map(cname).join('|');
-  const dir='https://www.google.com/maps/dir/?api=1&travelmode=driving&origin='+encodeURIComponent(cname(city[S.from]))+'&destination='+encodeURIComponent(cname(city[S.to]))+(wp?'&waypoints='+encodeURIComponent(wp):'');
+  const w=nights.slice(0,9).map(wp).join('|');
+  const dir='https://www.google.com/maps/dir/?api=1&travelmode=driving&origin='+encodeURIComponent(wp(plan.a))+'&destination='+encodeURIComponent(wp(plan.b))+(w?'&waypoints='+encodeURIComponent(w):'');
   links.innerHTML=`<a class="btn" href="${dir}" target="_blank" rel="noopener">Open route in Google Maps ↗</a>`;
   // days
   const start=new Date(S.date+'T12:00:00');
-  days.innerHTML='';
-  plan.forEach((d,i)=>{
+  days.innerHTML=banner?`<div class="banner">${banner}</div>`:'';
+  plan.days.forEach((d,i)=>{
     const dt=new Date(start);dt.setDate(dt.getDate()+i);
     const when=isNaN(dt)?`Day ${i+1}`:`Day ${i+1} · ${dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}`;
-    const last=i===plan.length-1,c=city[d.to];
+    const last=i===plan.days.length-1,c=d.to;
     const card=document.createElement('article');card.className='day';
-    card.innerHTML=`<div class="dayhead"><div class="top"><span class="when">${when}</span><span class="dist">${d.mi>S.mpd?'<span class="pill no">Over your daily max</span> ':''}${fmtMi(d.mi)} mi · ${fmtHr(d.mi)}</span></div>
-      <div class="leg">${city[d.from].n} → ${c.n}</div><div class="shields"></div></div>
-      <div class="sign ${last?'arrive':''}"><span class="nm">${cname(c)}</span><span class="nt">${last?'You’ve arrived':'Overnight '+(i+1)}</span></div>`;
+    card.innerHTML=`<div class="dayhead"><div class="top"><span class="when">${when}</span><span class="dist">${d.mi>S.mpd+1?'<span class="pill no">Over your daily max</span> ':''}${fmtMi(d.mi)} mi · ${fmtSec(d.sec)}</span></div>
+      <div class="leg">${esc(d.from.name)} → ${esc(c.name)}</div><div class="shields"></div></div>
+      <div class="sign ${last?'arrive':''}"><span class="nm">${esc(c.full)}</span><span class="nt">${last?'You’ve arrived':'Overnight '+(i+1)}</span></div>`;
     const sh=card.querySelector('.shields');d.roads.forEach(l=>sh.appendChild(shield(l)));
-    if(d.via.length){const v=document.createElement('span');v.style.cssText='font-size:12px;color:var(--muted);margin-left:4px';v.textContent='via '+d.via.map(x=>city[x].n).join(', ');sh.appendChild(v);}
+    if(d.via.length){const v=document.createElement('span');v.style.cssText='font-size:12px;color:var(--muted);margin-left:4px';v.textContent='via '+d.via.join(', ');sh.appendChild(v);}
     if(!last){
       const ul=document.createElement('ul');ul.className='hotels';
       const ok=CHAINS.filter(ch=>eligible(ch,o,c).ok).sort((a,b)=>(a.type==='free'?0:a.lo)-(b.type==='free'?0:b.lo));
       if(!ok.length)ul.innerHTML='<li><span class="hn">No major chain matches your filters here.<small>Try the full pet-friendly search below.</small></span></li>';
+      const where=c.q?`in ${esc(c.name)}`:'nearby';
       ok.forEach(ch=>{const li=document.createElement('li');
-        li.innerHTML=`<span class="hn">${ch.name}<small>${ch.sub}</small></span><span class="fee ${ch.type==='free'?'free':''}">${feeText(ch)}</span><a class="find" target="_blank" rel="noopener" href="${gm(ch.name.replace(' brands','')+' '+cname(c))}">Find in ${c.n} ↗</a>`;ul.appendChild(li);});
+        li.innerHTML=`<span class="hn">${ch.name}<small>${ch.sub}</small></span><span class="fee ${ch.type==='free'?'free':''}">${feeText(ch)}</span><a class="find" target="_blank" rel="noopener" href="${gmSearch(ch.name.replace(' brands',''),c)}">Find ${where} ↗</a>`;ul.appendChild(li);});
       card.appendChild(ul);
-      const a=document.createElement('div');a.className='allpet';a.innerHTML=`<a target="_blank" rel="noopener" href="${gm('pet friendly hotels '+cname(c))}">See every pet-friendly hotel in ${c.n} ↗</a>`;card.appendChild(a);
+      const a=document.createElement('div');a.className='allpet';a.innerHTML=`<a target="_blank" rel="noopener" href="${gmSearch('pet friendly hotels',c)}">See every pet-friendly hotel ${where} ↗</a>`;card.appendChild(a);
     }
     days.appendChild(card);
   });
-  // fee table
+  // fees
   const n=nights.length;
-  const rows=CHAINS.map(ch=>{
-    const gen=eligible(ch,o,null);const avail=nights.filter(c=>!ch.metro||c.m).length;
-    let lo=0,hi=0;if(ch.type!=='free'){lo=ch.lo*avail;hi=ch.hi*avail;}
-    return {ch,gen,avail,lo,hi};
-  }).sort((a,b)=>(b.gen.ok-a.gen.ok)||(a.lo-b.lo));
+  const rows=CHAINS.map(ch=>{const gen=eligible(ch,o,null);const avail=nights.filter(s=>!ch.metro||s.metro).length;
+    let lo=0,hi=0;if(ch.type!=='free'){lo=ch.lo*avail;hi=ch.hi*avail;}return {ch,gen,avail,lo,hi};})
+    .sort((a,b)=>((b.gen.ok&&b.avail>0)-(a.gen.ok&&a.avail>0))||(a.lo-b.lo));
   fees.innerHTML=`<thead><tr><th>Chain</th><th>Policy</th><th style="text-align:right">${n} night${n===1?'':'s'}</th></tr></thead><tbody>`+
     rows.map(({ch,gen,avail,lo,hi})=>{
-      const tot=!gen.ok?'—':avail===0?'—':ch.type==='free'?'$0':lo===hi?`$${lo}`:`$${lo}–${hi}`;
+      const tot=!gen.ok||avail===0?'—':ch.type==='free'?'$0':lo===hi?`$${lo}`:`$${lo}–${hi}`;
       const cov=n===0?'':avail<n?`<span class="pill">At ${avail} of ${n} stops</span>`:`<span class="pill ok">Every stop</span>`;
       const st=gen.ok?cov:gen.why.map(w=>`<span class="pill no">${w}</span>`).join(' ');
       const lim=[ch.maxPets?`${ch.maxPets} pet${ch.maxPets>1?'s':''}`:'pet limit varies',ch.maxLb?`${ch.maxLb} lb`:'weight varies'].join(' · ');
       return `<tr class="${gen.ok?'':'out'}"><td><b>${ch.name}</b><br>${st}</td><td>${feeText(ch)}<br><small style="color:var(--muted)">${lim}${ch.cats?'':' · dogs only'}</small></td><td class="n">${tot}</td></tr>`;
     }).join('')+'</tbody>';
   if(n===0)fees.innerHTML+='<tbody><tr><td colspan="3" style="color:var(--muted)">This trip fits in one day, so no hotel nights.</td></tr></tbody>';
-  $('mpdOut').textContent=`${S.mpd} mi · ${fmtHr(S.mpd)}`;
 }
 $('mpd').addEventListener('input',()=>$('mpdOut').textContent=`${$('mpd').value} mi · ${fmtHr($('mpd').value)}`);
-syncControls();render();
+syncControls();refreshRoute();
 </script>

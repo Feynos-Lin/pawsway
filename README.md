@@ -28,9 +28,20 @@ Links to Google Maps open in your Maps app or default browser.
 
 Push a tag (`git tag v1.0.1 && git push origin v1.0.1`) or run **Build and release** from the Actions tab with a version number. The workflow builds the APK and publishes the release. Android builds are signed with the `ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` repository secrets when present (debug-signed otherwise).
 
+## Google Maps routing
+
+With a Google key, Pawsway asks Google's Routes API for the fastest driving route, then splits it into days and picks overnight towns along it. Start and destination can be any address. Without a key it uses its built-in interstate network and city list.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and attach a billing account.
+2. Enable the **Routes API**.
+3. Create an API key under **APIs & Services → Credentials**. Restrict it to the Routes API.
+4. In Pawsway, paste the key under **Routing** and tap **Save**.
+
+The key is stored only on your device. One route lookup is made each time the start or destination changes; changing the daily limit or pet filters doesn't call Google again. In the Android app, requests go through the app itself (only `*.googleapis.com` is allowed).
+
 ## Caveats
 
-- The map is a schematic drawing and mileage is approximate (straight-line distance × 1.17). Overnights can only land on towns in the network.
+- The map is a schematic drawing. Without a Google key, mileage is approximate (straight-line distance × 1.17). Overnight stops are towns from Pawsway's list of about 125; with Google routing, a day with no listed town in range ends at a mile marker with a nearby-hotel search instead.
 - Pet fees are typical brand policies. Most hotels are franchised and set their own rules, so confirm with the specific property.
 
 ## Building
